@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="utf-8"/>
+  <title>Safe Links</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet"/>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: black;
+      font-family: 'Share Tech Mono', monospace;
+      color: #00ff00;
+    }
+    canvas#matrix {
+      position: fixed;
+      top: 0;
+      left: 0;
+      z-index: -1;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .scanner-container {
+      width: 90%;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 30px;
+      background: rgba(0,0,0,0.85);
+      border: 2px solid #00ff00;
+      border-radius: 10px;
+      box-shadow: 0 0 30px #00ff00;
+    }
+    h1 {
+      text-align: center;
+      text-shadow: 0 0 20px #0f0;
+      font-size: 2em;
+      margin-bottom: 30px;
+    }
+    .input-group {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    input[type="url"] {
+      flex: 1;
+      padding: 10px;
+      background: #000;
+      border: 2px solid #0f0;
+      color: #0f0;
+      font-size: 1em;
+    }
+    button {
+      padding: 10px 20px;
+      background: #002200;
+      color: #00ff00;
+      border: 2px solid #00ff00;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+    button:hover {
+      background: #004400;
+      text-shadow: 0 0 10px #00ff00;
+    }
+    .results {
+      border: 2px solid #0f0;
+      padding: 15px;
+      height: 150px;
+      overflow-y: auto;
+      background: #111;
+      margin-bottom: 20px;
+    }
+    .alert {
+      padding: 5px;
+      margin: 5px 0;
+      border-left: 4px solid;
+    }
+    .danger { color: red; border-color: red; }
+    .warning { color: yellow; border-color: yellow; }
+    .info { color: lime; border-color: lime; }
+    .circle-container {
+      position: relative;
+      width: 200px;
+      height: 200px;
+      border-radius: 50%;
+      margin: 20px auto;
+      border: 5px solid #00ff00;
+      overflow: hidden;
+    }
+    .circle {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background-color: rgba(0,255,0,0.3);
+      transition: background-color 1s;
+    }
+    .percentage-text {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%,-50%);
+      font-size: 2em;
+      background: linear-gradient(90deg,#00ff00,#66ff66);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    @keyframes shake {
+      0% { transform: translateX(0) }
+      25% { transform: translateX(-10px) }
+      50% { transform: translateX(10px) }
+      75% { transform: translateX(-10px) }
+      100% { transform: translateX(0) }
+    }
+    .shake { animation: shake 0.5s ease-in-out }
+    @keyframes pulse {
+      0%,100% { transform: scale(1); opacity: 0.7 }
+      50% { transform: scale(1.1); opacity: 1 }
+    }
+    .pulse { animation: pulse 2s infinite ease-in-out }
+  </style>
+</head>
+<body>
+
+<canvas id="matrix"></canvas>
+
+<div class="scanner-container">
+  <div style="text-align: center; margin-bottom: 20px;">
+  </div>
+  <h1>:: Safe Links ::</h1>
+  <div class="input-group">
+    <input id="urlInput" placeholder="أدخل الرابط لفحصه..." type="url"/>
+    <button onclick="startScan()">فحص</button>
+  </div>
+  <div class="results" id="results">
+    <div class="alert info">جاهز للفحص...</div>
+  </div>
+  <div class="circle-container">
+    <div class="circle" id="circle"></div>
+    <div class="percentage-text" id="percentageText">0%</div>
+  </div>
+</div>
+
+<script>
+  const canvas = document.getElementById("matrix");
+  const ctx = canvas.getContext("2d");
+
+  function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  resizeCanvas();
+  window.addEventListener("resize", resizeCanvas);
+
+  const cols = Math.floor(canvas.width / 20);
+  const drops = Array(cols).fill(1);
+function drawMatrix() {
+    ctx.fillStyle = "rgba(0,0,0,0.05)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#0f0";
+    ctx.font = "18px monospace";
+    drops.forEach((y, i) => {
+      const ch = String.fromCharCode(33 + Math.random() * 94);
+      ctx.fillText(ch, i * 20, y * 20);
+      if (y * 20 > canvas.height && Math.random() > 0.975) drops[i] = 0;
+      drops[i]++;
+    });
+  }
+  setInterval(drawMatrix, 50);
+
+  const alerts = {
+    danger: t => <div class="alert danger">⛔ ${t}</div>,
+    warning: t => <div class="alert warning">⚠️ ${t}</div>,
+    info: t => <div class="alert info">ℹ️ ${t}</div>
+  };
+
+  let blacklist = [];
+  fetch("https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts")
+    .then(r => r.text())
+    .then(t => {
+      blacklist = t.split("\n").filter(l => l.startsWith("0.0.0.0")).map(l => l.split(" ")[1].trim());
+    })
+    .catch(() => { blacklist = ["bad.com", "malware.org", "phishing.net"] });
+
+  async function dnsLookup(domain) {
+    try {
+      const r = await fetch(https://dns.google/resolve?name=${domain}&type=A);
+      const o = await r.json();
+      if (o.Status === 0 && o.Answer) return true;
+    } catch {}
+    return false;
+  }
+
+  async function startScan() {
+    const inp = document.getElementById("urlInput").value.trim();
+    const resDiv = document.getElementById("results");
+    const circle = document.getElementById("circle");
+    const pct = document.getElementById("percentageText");
+
+    if (!inp) {
+      resDiv.innerHTML = alerts.warning("يرجى إدخال رابط!");
+      return;
+    }
+
+    resDiv.innerHTML = alerts.info("جارٍ الفحص...");
+    const domain = inp.replace(/^https?:\/\//, "").split("/")[0];
+    if (!domain.match(/^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/)) {
+      resDiv.innerHTML = alerts.warning("الرابط غير صالح!");
+      pct.innerText = "--";
+      circle.style.backgroundColor = "rgba(255,255,0,0.3)";
+      return;
+    }
+
+    const ok = await dnsLookup(domain);
+    let threat = 0, msg = "";
+
+    if (blacklist.includes(domain)) {
+      threat = 90;
+      msg = "رابط احتيالي!";
+      if (!ok) msg += " + فشل DNS";
+    } else if (inp.includes("free") || inp.includes("offer")) {
+      threat = ok ? 50 : 60;
+      msg = "رابط مشبوه!";
+      msg += ok ? " + DNS صالح" : " + فشل DNS";
+    } else {
+      threat = ok ? 10 : 30;
+      msg = ok ? "رابط آمن + DNS صالح" : "رابط آمن ولكن DNS فشل";
+    }
+
+    resDiv.innerHTML = alerts[
+      threat >= 70 ? "danger" :
+      threat >= 40 ? "warning" : "info"
+    ](msg);
+
+    circle.style.backgroundColor =
+      threat >= 70 ? "rgba(255,0,0,0.5)" :
+      threat >= 40 ? "rgba(255,255,0,0.5)" :
+      "rgba(0,255,0,0.3)";
+    circle.classList.remove("shake", "pulse");
+    if (threat >= 70) circle.classList.add("shake");
+    else if (threat < 40) circle.classList.add("pulse");
+
+    pct.innerText = threat + "%";
+
+    let level = "";
+    if (threat <= 15) level = "مستوى خطر: آمن جداً";
+    else if (threat <= 30) level = "مستوى خطر: منخفض";
+    else if (threat <= 50) level = "مستوى خطر: متوسط";
+    else if (threat <= 70) level = "مستوى خطر: مرتفع";
+    else if (threat <= 85) level = "مستوى خطر: خطر جداً";
+    else level = "مستوى خطر: حرج";
+
+    const stars = "★".repeat(Math.round(threat / 20));
+
+    const riskLevelText = document.createElement("div");
+    riskLevelText.innerHTML = <div style='margin-top:10px; font-size: 1.1em;'>${level} ${stars}</div>;
+    resDiv.appendChild(riskLevelText);
+  }
+</script>
+
+<!-- منطق التقييم حسب مستوى الخطر -->
+<script>
+function getRiskRating(level) {
+  let rating = { stars: 0, percentage: 0 };
+  switch(level) {
+    case "آمن":
+      rating = { stars: 1, percentage: 10 };
+      break;
+    case "منخفض":
+      rating = { stars: 2, percentage: 20 };
+      break;
+    case "متوسط":
+      rating = { stars: 3, percentage: 50 };
+      break;
+    case "عالي":
+      rating = { stars: 4, percentage: 80 };
+      break;
+    case "عالي جداً":
+      rating = { stars: 5, percentage: 100 };
+      break;
+  }
+  return rating;
+}
+</script>
+
+</body>
+</html>
